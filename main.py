@@ -5,7 +5,7 @@ import logging
 import snscrape.modules.twitter as sntwitter
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from flask import Flask
 
 ACCOUNTS_FILE = 'accounts.json'
 SENT_FILE = 'sent.json'
@@ -13,6 +13,9 @@ CHECK_INTERVAL = 30
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Flask доданий для імітації веб-сервера
+app = Flask(__name__)
 
 # Завантаження акаунтів
 def load_accounts():
@@ -99,36 +102,34 @@ async def check_tweets(app):
         await asyncio.sleep(CHECK_INTERVAL)
 
 # Імітація HTTP-сервера
-class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/html")
-        self.end_headers()
-        self.wfile.write(b"OK")
-
-async def start_http_server():
-    httpd = HTTPServer(('0.0.0.0', 80), SimpleHTTPRequestHandler)
-    httpd.serve_forever()
+@app.route('/')
+def hello_world():
+    return 'OK'
 
 # Головна функція
 async def main():
     token = os.getenv("BOT_TOKEN")
-    app = ApplicationBuilder().token(token).build()
-    app.chat_ids = set()
+    app_telegram = ApplicationBuilder().token(token).build()
+    app_telegram.chat_ids = set()
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("add", add_account))
-    app.add_handler(CommandHandler("remove", remove_account))
-    app.add_handler(CommandHandler("list", list_accounts))
+    app_telegram.add_handler(CommandHandler("start", start))
+    app_telegram.add_handler(CommandHandler("add", add_account))
+    app_telegram.add_handler(CommandHandler("remove", remove_account))
+    app_telegram.add_handler(CommandHandler("list", list_accounts))
 
     async def register_chat(update: Update, context: ContextTypes.DEFAULT_TYPE):
-        app.chat_ids.add(update.effective_chat.id)
-    app.add_handler(CommandHandler("start", register_chat))
+        app_telegram.chat_ids.add(update.effective_chat.id)
+    app_telegram.add_handler(CommandHandler("start", register_chat))
 
-    asyncio.create_task(check_tweets(app))
-    asyncio.create_task(start_http_server())  # Запускаємо HTTP-сервер
+    asyncio.create_task(check_tweets(app_telegram))
+    
+    # Запускаємо Flask для імітації веб-сервера
+    import threading
+    def run_flask():
+        app.run(host='0.0.0.0', port=80)
+    threading.Thread(target=run_flask).start()
 
-    await app.run_polling()
+    await app_telegram.run_polling()
 
 if __name__ == "__main__":
     asyncio.run(main())
